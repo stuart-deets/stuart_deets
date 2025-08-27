@@ -234,35 +234,10 @@ class StuartDeetsWebsite {
     }
     
     setupHomePageAnimations() {
-        // Add typing effect to title (subtle)
+        // Home page animations (typing effect removed)
         const titleElement = document.querySelector('.title-main');
         if (titleElement && !titleElement.classList.contains('animated')) {
             titleElement.classList.add('animated');
-            titleElement.style.borderRight = '2px solid var(--primary-color)';
-            titleElement.style.animation = 'typing 2s steps(12) forwards, blink 1s infinite';
-            
-            // Add CSS for typing animation
-            if (!document.querySelector('#typing-animation')) {
-                const style = document.createElement('style');
-                style.id = 'typing-animation';
-                style.textContent = `
-                    @keyframes typing {
-                        from { width: 0; }
-                        to { width: 100%; }
-                    }
-                    @keyframes blink {
-                        0%, 50% { border-color: transparent; }
-                        51%, 100% { border-color: var(--primary-color); }
-                    }
-                `;
-                document.head.appendChild(style);
-            }
-            
-            // Remove cursor after animation
-            setTimeout(() => {
-                titleElement.style.borderRight = 'none';
-                titleElement.style.animation = 'none';
-            }, 3500);
         }
     }
     
