@@ -166,6 +166,12 @@
                 this.canvas = document.getElementById('canvas');
                 this.ctx = this.canvas.getContext('2d');
                 
+                // Animation state
+                this.time = 0;
+                this.lastScrollPosition = 0;
+                this.scrollVelocity = 0;
+                this.ambientRotation = { xy: 0, xz: 0, xw: 0, yz: 0, yw: 0, zw: 0 };
+                
                 this.setupCanvas();
                 this.createTesseract();
                 this.createStones();
@@ -350,19 +356,37 @@
             this.drawLine(v1.pos2D, v2.pos2D, color, opacity);
         });
         
-        // Draw stones
+        // Draw stones with enhanced scroll-based animation
         this.stones.forEach((stone, index) => {
             const transformed = rotationMatrix.transform(stone.position4D);
             const projected3D = this.projectTo3D(transformed);
             const projected2D = this.projectTo2D(projected3D);
             
-            // Add animation based on scroll
-            const phase = scrollProgress * Math.PI * 4 + index * 0.1;
-            projected2D.y += Math.sin(phase) * 15 * projected2D.scale;
+            // Enhanced scroll-based animation with multiple wave patterns
+            const phase1 = scrollProgress * Math.PI * 6 + index * 0.15;
+            const phase2 = scrollProgress * Math.PI * 3.2 + index * 0.08;
+            const phase3 = this.time * 0.5 + index * 0.2; // Time-based ambient movement
             
-            // Calculate opacity and scale based on depth
-            const opacity = Math.max(0.1, 0.9 - Math.abs(projected3D.z) * 0.15 - Math.abs(transformed.w) * 0.2);
-            const scale = Math.max(0.3, projected2D.scale * (1 - Math.abs(transformed.w) * 0.1));
+            // Combine multiple movement patterns
+            const scrollMovementY = Math.sin(phase1) * 20 * projected2D.scale;
+            const scrollMovementX = Math.cos(phase2) * 12 * projected2D.scale;
+            const ambientFloat = Math.sin(phase3) * 5 * projected2D.scale;
+            
+            // Apply velocity-based displacement
+            const velocityDisplacement = this.scrollVelocity * index * 0.5;
+            
+            projected2D.y += scrollMovementY + ambientFloat + velocityDisplacement;
+            projected2D.x += scrollMovementX + velocityDisplacement * 0.3;
+            
+            // Enhanced opacity and scale calculation
+            const depthFactor = Math.abs(projected3D.z) * 0.15 + Math.abs(transformed.w) * 0.2;
+            const baseOpacity = 0.9 - depthFactor;
+            const scrollInfluence = Math.abs(Math.sin(phase1)) * 0.2;
+            const opacity = Math.max(0.1, baseOpacity + scrollInfluence);
+            
+            const baseScale = projected2D.scale * (1 - Math.abs(transformed.w) * 0.1);
+            const scaleVariation = 1 + Math.sin(phase2) * 0.3;
+            const scale = Math.max(0.3, baseScale * scaleVariation);
             
             if (opacity > 0.05) {
                 this.drawStone(projected2D, stone.isBlack, scale, opacity);
@@ -375,22 +399,35 @@
             this.resizeCanvas();
         });
         
+        let scrollTimeout;
         window.addEventListener('scroll', () => {
-            this.updateVisualization();
-        });
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                this.updateVisualization();
+            }, 8); // More responsive scroll handling
+        }, { passive: true });
     }
     
     updateVisualization() {
-        const scrollProgress = window.pageYOffset / (document.body.scrollHeight - window.innerHeight);
+        const currentScroll = window.pageYOffset;
+        const maxScroll = Math.max(document.body.scrollHeight - window.innerHeight, 1);
+        const scrollProgress = currentScroll / maxScroll;
         
-        // Create complex 4D rotation based on scroll
+        // Calculate scroll velocity for dynamic effects
+        this.scrollVelocity = (currentScroll - this.lastScrollPosition) * 0.01;
+        this.lastScrollPosition = currentScroll;
+        
+        // Create complex 4D rotation based on scroll with enhanced responsiveness
+        const baseIntensity = 1 + Math.abs(this.scrollVelocity) * 0.5;
+        const velocityInfluence = this.scrollVelocity * 0.1;
+        
         this.currentRotation = new Matrix4D()
-            .rotateXY(scrollProgress * Math.PI * 2)
-            .rotateXZ(scrollProgress * Math.PI * 1.5)
-            .rotateXW(scrollProgress * Math.PI * 1.2)
-            .rotateYZ(scrollProgress * Math.PI * 0.8)
-            .rotateYW(scrollProgress * Math.PI * 0.6)
-            .rotateZW(scrollProgress * Math.PI * 0.4);
+            .rotateXY((scrollProgress * Math.PI * 2.5 + velocityInfluence) * baseIntensity)
+            .rotateXZ((scrollProgress * Math.PI * 1.8 - velocityInfluence * 0.5) * baseIntensity)
+            .rotateXW((scrollProgress * Math.PI * 1.4 + velocityInfluence * 0.3) * baseIntensity)
+            .rotateYZ((scrollProgress * Math.PI * 1.1 - velocityInfluence * 0.7) * baseIntensity)
+            .rotateYW((scrollProgress * Math.PI * 0.9 + velocityInfluence * 0.4) * baseIntensity)
+            .rotateZW((scrollProgress * Math.PI * 0.6 - velocityInfluence * 0.2) * baseIntensity);
         
         this.currentScrollProgress = scrollProgress;
     }
@@ -398,16 +435,33 @@
     animate() {
         requestAnimationFrame(() => this.animate());
         
+        this.time += 0.016; // Approximate 60fps
+        
+        // Update ambient rotation angles (reduced speed)
+        this.ambientRotation.xy += Math.sin(this.time * 0.15) * 0.003 + 0.0015;
+        this.ambientRotation.xz += Math.cos(this.time * 0.1) * 0.002 + 0.001;
+        this.ambientRotation.xw += Math.sin(this.time * 0.08) * 0.002 + 0.0008;
+        this.ambientRotation.yz += Math.cos(this.time * 0.12) * 0.0025 + 0.0012;
+        this.ambientRotation.yw += Math.sin(this.time * 0.09) * 0.0015 + 0.0008;
+        this.ambientRotation.zw += Math.cos(this.time * 0.06) * 0.001 + 0.0005;
+        
         // Get current rotation or create default
-        const time = Date.now() * 0.0005;
         let rotation = this.currentRotation || new Matrix4D();
         
-        // Add subtle continuous rotation
+        // Apply ambient rotation that varies with scroll velocity
+        const ambientIntensity = 1 + Math.abs(this.scrollVelocity) * 0.3;
         rotation = rotation
-            .rotateXY(Math.sin(time) * 0.01)
-            .rotateZW(Math.cos(time) * 0.005);
+            .rotateXY(this.ambientRotation.xy * ambientIntensity)
+            .rotateXZ(this.ambientRotation.xz * ambientIntensity)
+            .rotateXW(this.ambientRotation.xw * ambientIntensity)
+            .rotateYZ(this.ambientRotation.yz * ambientIntensity)
+            .rotateYW(this.ambientRotation.yw * ambientIntensity)
+            .rotateZW(this.ambientRotation.zw * ambientIntensity);
         
         const scrollProgress = this.currentScrollProgress || 0;
+        
+        // Decay scroll velocity
+        this.scrollVelocity *= 0.95;
         
         this.render(rotation, scrollProgress);
     }
