@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>4D Go Tesseract</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: transparent;
+            color: #fff;
+            font-family: 'Arial', sans-serif;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            height: 500vh; /* Long scroll for extended animation */
+        }
+        
+        .fixed-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <canvas class="fixed-canvas" id="canvas"></canvas>
+    </div>
+
+    <script>
+        class Vector4 {
+            constructor(x = 0, y = 0, z = 0, w = 0) {
+                this.x = x;
+                this.y = y;
+                this.z = z;
+                this.w = w;
+            }
+            
+            clone() {
+                return new Vector4(this.x, this.y, this.z, this.w);
+            }
+        }
+
+        class Vector3 {
+            constructor(x = 0, y = 0, z = 0) {
+                this.x = x;
+                this.y = y;
+                this.z = z;
+            }
+        }
+
+        class Matrix4D {
+            constructor() {
+                this.elements = new Array(16).fill(0);
+                this.identity();
+            }
+            
+            identity() {
+                for (let i = 0; i < 16; i++) {
+                    this.elements[i] = (i % 5 === 0) ? 1 : 0;
+                }
+                return this;
+            }
+            
+            rotateXY(angle) {
+                const c = Math.cos(angle);
+                const s = Math.sin(angle);
+                const m = new Matrix4D();
+                m.elements[0] = c; m.elements[1] = -s;
+                m.elements[4] = s; m.elements[5] = c;
+                m.elements[10] = 1;
+                m.elements[15] = 1;
+                return this.multiply(m);
+            }
+            
+            rotateXZ(angle) {
+                const c = Math.cos(angle);
+                const s = Math.sin(angle);
+                const m = new Matrix4D();
+                m.elements[0] = c; m.elements[2] = -s;
+                m.elements[8] = s; m.elements[10] = c;
+                m.elements[5] = 1;
+                m.elements[15] = 1;
+                return this.multiply(m);
+            }
+            
+            rotateXW(angle) {
+                const c = Math.cos(angle);
+                const s = Math.sin(angle);
+                const m = new Matrix4D();
+                m.elements[0] = c; m.elements[3] = -s;
+                m.elements[12] = s; m.elements[15] = c;
+                m.elements[5] = 1;
+                m.elements[10] = 1;
+                return this.multiply(m);
+            }
+            
+            rotateYZ(angle) {
+                const c = Math.cos(angle);
+                const s = Math.sin(angle);
+                const m = new Matrix4D();
+                m.elements[5] = c; m.elements[6] = -s;
+                m.elements[9] = s; m.elements[10] = c;
+                m.elements[0] = 1;
+                m.elements[15] = 1;
+                return this.multiply(m);
+            }
+            
+            rotateYW(angle) {
+                const c = Math.cos(angle);
+                const s = Math.sin(angle);
+                const m = new Matrix4D();
+                m.elements[5] = c; m.elements[7] = -s;
+                m.elements[13] = s; m.elements[15] = c;
+                m.elements[0] = 1;
+                m.elements[10] = 1;
+                return this.multiply(m);
+            }
+            
+            rotateZW(angle) {
+                const c = Math.cos(angle);
+                const s = Math.sin(angle);
+                const m = new Matrix4D();
+                m.elements[10] = c; m.elements[11] = -s;
+                m.elements[14] = s; m.elements[15] = c;
+                m.elements[0] = 1;
+                m.elements[5] = 1;
+                return this.multiply(m);
+            }
+            
+            multiply(m) {
+                const result = new Matrix4D();
+                for (let i = 0; i < 4; i++) {
+                    for (let j = 0; j < 4; j++) {
+                        let sum = 0;
+                        for (let k = 0; k < 4; k++) {
+                            sum += this.elements[i * 4 + k] * m.elements[k * 4 + j];
+                        }
+                        result.elements[i * 4 + j] = sum;
+                    }
+                }
+                return result;
+            }
+            
+            transform(v) {
+                const x = v.x * this.elements[0] + v.y * this.elements[1] + v.z * this.elements[2] + v.w * this.elements[3];
+                const y = v.x * this.elements[4] + v.y * this.elements[5] + v.z * this.elements[6] + v.w * this.elements[7];
+                const z = v.x * this.elements[8] + v.y * this.elements[9] + v.z * this.elements[10] + v.w * this.elements[11];
+                const w = v.x * this.elements[12] + v.y * this.elements[13] + v.z * this.elements[14] + v.w * this.elements[15];
+                return new Vector4(x, y, z, w);
+            }
+        }
+
+        class FourDGo {
+            constructor() {
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                
+                this.setupCanvas();
+                this.createTesseract();
+                this.createStones();
+                this.setupEventListeners();
+                this.animate();
+            }
+            
+            setupCanvas() {
+                this.resizeCanvas();
+                this.centerX = this.canvas.width / 2;
+                this.centerY = this.canvas.height / 2;
+                this.scale = Math.min(this.canvas.width, this.canvas.height) / 8;
+            }
+            
+            resizeCanvas() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+                this.centerX = this.canvas.width / 2;
+                this.centerY = this.canvas.height / 2;
+                this.scale = Math.min(this.canvas.width, this.canvas.height) / 8;
+            }
+            
+            createTesseract() {
+                // Create tesseract vertices in 4D
+                this.vertices4D = [];
+                for (let x = -1; x <= 1; x += 2) {
+                    for (let y = -1; y <= 1; y += 2) {
+                        for (let z = -1; z <= 1; z += 2) {
+                            for (let w = -1; w <= 1; w += 2) {
+                                this.vertices4D.push(new Vector4(x, y, z, w));
+                            }
+                        }
+                    }
+                }
+                
+                // Create edges
+                this.edges = [];
+                for (let i = 0; i < this.vertices4D.length; i++) {
+                    for (let j = i + 1; j < this.vertices4D.length; j++) {
+                        const v1 = this.vertices4D[i];
+                        const v2 = this.vertices4D[j];
+                        
+                        let diff = 0;
+                        if (v1.x !== v2.x) diff++;
+                        if (v1.y !== v2.y) diff++;
+                        if (v1.z !== v2.z) diff++;
+                        if (v1.w !== v2.w) diff++;
+                        
+                        if (diff === 1) {
+                            this.edges.push([i, j]);
+                        }
+                    }
+                }
+            }
+            
+            createStones() {
+                this.stones = [];
+                
+                // Generate random stone positions in 4D space
+                const stoneCount = 120;
+                const boardSize = 19;
+                
+                for (let i = 0; i < stoneCount; i++) {
+                    const x = Math.floor(Math.random() * boardSize) - Math.floor(boardSize / 2);
+                    const y = Math.floor(Math.random() * boardSize) - Math.floor(boardSize / 2);
+                    const z = Math.floor(Math.random() * boardSize) - Math.floor(boardSize / 2);
+                    const w = Math.floor(Math.random() * boardSize) - Math.floor(boardSize / 2);
+                    
+                    const position4D = new Vector4(
+                        x * 0.15, y * 0.15, z * 0.15, w * 0.15
+                    );
+                    
+                    const isBlack = Math.random() > 0.5;
+                    this.stones.push({ position4D, isBlack });
+                }
+            }
+            
+            projectTo3D(v4) {
+                // Perspective projection from 4D to 3D
+                const w_offset = 4; // Viewer distance in 4th dimension
+                const scale = w_offset / (w_offset - v4.w);
+                return new Vector3(v4.x * scale, v4.y * scale, v4.z * scale);
+            }
+            
+            projectTo2D(v3) {
+                // Perspective projection from 3D to 2D
+                const z_offset = 6; // Viewer distance
+                const scale = z_offset / (z_offset - v3.z);
+                return {
+                    x: this.centerX + v3.x * this.scale * scale,
+                    y: this.centerY + v3.y * this.scale * scale,
+                    scale: scale
+                };
+            }
+            
+            drawLine(p1, p2, color, opacity) {
+                this.ctx.save();
+                this.ctx.globalAlpha = opacity;
+                this.ctx.strokeStyle = color;
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.moveTo(p1.x, p1.y);
+                this.ctx.lineTo(p2.x, p2.y);
+                this.ctx.stroke();
+                this.ctx.restore();
+            }
+            
+            drawStone(pos, isBlack, scale, opacity) {
+                const radius = 8 * scale;
+                
+                this.ctx.save();
+                this.ctx.globalAlpha = opacity;
+                
+                // Draw glow
+                const glowRadius = radius * 1.8;
+                const gradient = this.ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, glowRadius);
+                gradient.addColorStop(0, isBlack ? 'rgba(100, 100, 255, 0.3)' : 'rgba(255, 255, 255, 0.3)');
+                gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                
+                this.ctx.fillStyle = gradient;
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, glowRadius, 0, Math.PI * 2);
+                this.ctx.fill();
+                
+                // Draw stone body
+                const stoneGradient = this.ctx.createRadialGradient(
+            pos.x - radius * 0.3, pos.y - radius * 0.3, 0,
+            pos.x, pos.y, radius
+        );
+        
+        if (isBlack) {
+            stoneGradient.addColorStop(0, '#444444');
+            stoneGradient.addColorStop(1, '#111111');
+        } else {
+            stoneGradient.addColorStop(0, '#ffffff');
+            stoneGradient.addColorStop(1, '#cccccc');
+        }
+        
+        this.ctx.fillStyle = stoneGradient;
+        this.ctx.beginPath();
+        this.ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        // Draw highlight
+        this.ctx.fillStyle = isBlack ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.5)';
+        this.ctx.beginPath();
+        this.ctx.arc(pos.x - radius * 0.3, pos.y - radius * 0.3, radius * 0.3, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        this.ctx.restore();
+    }
+    
+    render(rotationMatrix, scrollProgress) {
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Transform and project vertices
+        const projectedVertices = this.vertices4D.map(v => {
+            const transformed = rotationMatrix.transform(v);
+            const projected3D = this.projectTo3D(transformed);
+            return { 
+                pos2D: this.projectTo2D(projected3D), 
+                depth: projected3D.z,
+                transformed4D: transformed
+            };
+        });
+        
+        // Sort by depth for proper rendering order
+        const sortedVertices = projectedVertices.slice().sort((a, b) => a.depth - b.depth);
+        
+        // Draw tesseract edges
+        this.edges.forEach(edge => {
+            const v1 = projectedVertices[edge[0]];
+            const v2 = projectedVertices[edge[1]];
+            
+            const avgDepth = (v1.depth + v2.depth) / 2;
+            const opacity = Math.max(0.1, 0.7 - Math.abs(avgDepth) * 0.1);
+            
+            // Color based on 4D coordinates
+            const color = `hsl(${(v1.transformed4D.w + v2.transformed4D.w) * 60 + 240}, 70%, 60%)`;
+            
+            this.drawLine(v1.pos2D, v2.pos2D, color, opacity);
+        });
+        
+        // Draw stones
+        this.stones.forEach((stone, index) => {
+            const transformed = rotationMatrix.transform(stone.position4D);
+            const projected3D = this.projectTo3D(transformed);
+            const projected2D = this.projectTo2D(projected3D);
+            
+            // Add animation based on scroll
+            const phase = scrollProgress * Math.PI * 4 + index * 0.1;
+            projected2D.y += Math.sin(phase) * 15 * projected2D.scale;
+            
+            // Calculate opacity and scale based on depth
+            const opacity = Math.max(0.1, 0.9 - Math.abs(projected3D.z) * 0.15 - Math.abs(transformed.w) * 0.2);
+            const scale = Math.max(0.3, projected2D.scale * (1 - Math.abs(transformed.w) * 0.1));
+            
+            if (opacity > 0.05) {
+                this.drawStone(projected2D, stone.isBlack, scale, opacity);
+            }
+        });
+    }
+    
+    setupEventListeners() {
+        window.addEventListener('resize', () => {
+            this.resizeCanvas();
+        });
+        
+        window.addEventListener('scroll', () => {
+            this.updateVisualization();
+        });
+    }
+    
+    updateVisualization() {
+        const scrollProgress = window.pageYOffset / (document.body.scrollHeight - window.innerHeight);
+        
+        // Create complex 4D rotation based on scroll
+        this.currentRotation = new Matrix4D()
+            .rotateXY(scrollProgress * Math.PI * 2)
+            .rotateXZ(scrollProgress * Math.PI * 1.5)
+            .rotateXW(scrollProgress * Math.PI * 1.2)
+            .rotateYZ(scrollProgress * Math.PI * 0.8)
+            .rotateYW(scrollProgress * Math.PI * 0.6)
+            .rotateZW(scrollProgress * Math.PI * 0.4);
+        
+        this.currentScrollProgress = scrollProgress;
+    }
+    
+    animate() {
+        requestAnimationFrame(() => this.animate());
+        
+        // Get current rotation or create default
+        const time = Date.now() * 0.0005;
+        let rotation = this.currentRotation || new Matrix4D();
+        
+        // Add subtle continuous rotation
+        rotation = rotation
+            .rotateXY(Math.sin(time) * 0.01)
+            .rotateZW(Math.cos(time) * 0.005);
+        
+        const scrollProgress = this.currentScrollProgress || 0;
+        
+        this.render(rotation, scrollProgress);
+    }
+}
+
+// Initialize when page loads
+window.addEventListener('load', () => {
+    new FourDGo();
+});
+    </script>
+</body>
+</html>
