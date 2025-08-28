@@ -314,7 +314,6 @@ p {
     border-radius: 20px;
     position: relative;
     z-index: 2;
-    box-shadow: var(--shadow-heavy);
 }
 
 .image-overlay {

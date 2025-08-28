@@ -437,13 +437,13 @@
         
         this.time += 0.016; // Approximate 60fps
         
-        // Update ambient rotation angles (reduced speed)
-        this.ambientRotation.xy += Math.sin(this.time * 0.15) * 0.003 + 0.0015;
-        this.ambientRotation.xz += Math.cos(this.time * 0.1) * 0.002 + 0.001;
-        this.ambientRotation.xw += Math.sin(this.time * 0.08) * 0.002 + 0.0008;
-        this.ambientRotation.yz += Math.cos(this.time * 0.12) * 0.0025 + 0.0012;
-        this.ambientRotation.yw += Math.sin(this.time * 0.09) * 0.0015 + 0.0008;
-        this.ambientRotation.zw += Math.cos(this.time * 0.06) * 0.001 + 0.0005;
+        // Update ambient rotation angles (much slower, consistent speed)
+        this.ambientRotation.xy += 0.0003;
+        this.ambientRotation.xz += 0.0002;
+        this.ambientRotation.xw += 0.00015;
+        this.ambientRotation.yz += 0.00025;
+        this.ambientRotation.yw += 0.0002;
+        this.ambientRotation.zw += 0.0001;
         
         // Get current rotation or create default
         let rotation = this.currentRotation || new Matrix4D();
